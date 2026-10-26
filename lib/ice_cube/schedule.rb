@@ -19,6 +19,7 @@ module IceCube
       self.end_time = options[:end_time] if options[:end_time]
       @all_recurrence_rules = []
       @all_exception_rules = []
+      @exception_index = {}
       yield self if block_given?
     end
 
@@ -94,8 +95,8 @@ module IceCube
 
     # Remove an exception rule
     def remove_exception_rule(rule)
-      @exception_index = nil
       res = @all_exception_rules.delete(rule)
+      rebuild_exception_index
       res.nil? ? [] : [res]
     end
 
@@ -141,11 +142,11 @@ module IceCube
 
     # Remove an exception time
     def remove_exception_time(time)
-      @exception_index = nil
       found = false
       @all_exception_rules.delete_if do |rule|
         found = true if rule.is_a?(SingleOccurrenceRule) && rule.time == time
       end
+      rebuild_exception_index
       time if found
     end
     alias_method :remove_extime, :remove_exception_time
@@ -488,17 +489,22 @@ module IceCube
     end
 
     # Exception times as exact values (for de-duplication) and whole seconds
-    # (for lookup), plus the remaining exception rules. Rebuilt lazily after
-    # an exception is removed.
+    # (for lookup), plus the remaining exception rules. Like the rule arrays,
+    # the index is shared with copies made by dup/clone, so it is only ever
+    # updated in place.
     def exception_index
-      @exception_index ||= begin
-        single, rules = @all_exception_rules.partition { |r| r.is_a?(SingleOccurrenceRule) }
-        {
-          times: single.to_h { |r| [r.time.to_r, true] },
-          seconds: single.to_h { |r| [r.time.to_i, true] },
-          rules: rules
-        }
-      end
+      @exception_index ||= {}
+      rebuild_exception_index if @exception_index.empty?
+      @exception_index
+    end
+
+    def rebuild_exception_index
+      single, rules = @all_exception_rules.partition { |r| r.is_a?(SingleOccurrenceRule) }
+      (@exception_index ||= {}).replace(
+        times: single.to_h { |r| [r.time.to_r, true] },
+        seconds: single.to_h { |r| [r.time.to_i, true] },
+        rules: rules
+      )
     end
 
     def require_terminating_rules

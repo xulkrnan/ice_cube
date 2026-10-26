@@ -720,6 +720,19 @@ describe IceCube::Schedule do
       expect(schedule.exception_times).to eq([t0 + ONE_HOUR])
       expect(schedule.all_occurrences).to eq([t0, t0 + 2 * ONE_HOUR])
     end
+
+    it "should keep a copy and its original consistent with their exception times" do
+      schedule = IceCube::Schedule.new(t0 = Time.utc(2010, 1, 1))
+      schedule.rrule IceCube::Rule.hourly.count(4)
+      schedule.extime t0 + ONE_HOUR
+      schedule.all_occurrences
+      copy = schedule.dup
+      copy.remove_exception_time t0 + ONE_HOUR
+      copy.extime t0 + 2 * ONE_HOUR
+      [schedule, copy].each do |s|
+        expect(s.all_occurrences).to eq([0, 1, 2, 3].map { |h| t0 + h * ONE_HOUR } - s.exception_times)
+      end
+    end
   end
 
   describe :add_exception_time do
