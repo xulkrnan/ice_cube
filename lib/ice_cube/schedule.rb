@@ -1,3 +1,4 @@
+require "set"
 require "yaml"
 
 module IceCube
@@ -80,12 +81,21 @@ module IceCube
     # Add an exception rule to the schedule
     def add_exception_rule(rule)
       return if rule.nil?
-      @all_exception_rules << rule unless @all_exception_rules.include?(rule)
+      if rule.is_a?(SingleOccurrenceRule)
+        return if exception_index[:times].include?(rule.time.to_r)
+        exception_index[:times] << rule.time.to_r
+        exception_index[:seconds] << rule.time.to_i
+      else
+        return if @all_exception_rules.include?(rule)
+        exception_index[:rules] << rule
+      end
+      @all_exception_rules << rule
     end
     alias_method :exrule, :add_exception_rule
 
     # Remove an exception rule
     def remove_exception_rule(rule)
+      @exception_index = nil
       res = @all_exception_rules.delete(rule)
       res.nil? ? [] : [res]
     end
@@ -132,6 +142,7 @@ module IceCube
 
     # Remove an exception time
     def remove_exception_time(time)
+      @exception_index = nil
       found = false
       @all_exception_rules.delete_if do |rule|
         found = true if rule.is_a?(SingleOccurrenceRule) && rule.time == time
@@ -473,8 +484,21 @@ module IceCube
     # Return a boolean indicating whether or not a specific time
     # is excluded from the schedule
     def exception_time?(time)
-      @all_exception_rules.any? do |rule|
-        rule.on?(time, start_time)
+      exception_index[:seconds].include?(time.to_i) ||
+        exception_index[:rules].any? { |rule| rule.on?(time, start_time) }
+    end
+
+    # Exception times as exact values (for de-duplication) and whole seconds
+    # (for lookup), plus the remaining exception rules. Rebuilt lazily after
+    # an exception is removed.
+    def exception_index
+      @exception_index ||= begin
+        single, rules = @all_exception_rules.partition { |r| r.is_a?(SingleOccurrenceRule) }
+        {
+          times: single.map { |r| r.time.to_r }.to_set,
+          seconds: single.map { |r| r.time.to_i }.to_set,
+          rules: rules
+        }
       end
     end
 
