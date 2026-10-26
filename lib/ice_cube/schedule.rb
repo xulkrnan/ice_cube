@@ -1,4 +1,3 @@
-require "set"
 require "yaml"
 
 module IceCube
@@ -82,9 +81,9 @@ module IceCube
     def add_exception_rule(rule)
       return if rule.nil?
       if rule.is_a?(SingleOccurrenceRule)
-        return if exception_index[:times].include?(rule.time.to_r)
-        exception_index[:times] << rule.time.to_r
-        exception_index[:seconds] << rule.time.to_i
+        return if exception_index[:times].key?(rule.time.to_r)
+        exception_index[:times][rule.time.to_r] = true
+        exception_index[:seconds][rule.time.to_i] = true
       else
         return if @all_exception_rules.include?(rule)
         exception_index[:rules] << rule
@@ -484,7 +483,7 @@ module IceCube
     # Return a boolean indicating whether or not a specific time
     # is excluded from the schedule
     def exception_time?(time)
-      exception_index[:seconds].include?(time.to_i) ||
+      exception_index[:seconds].key?(time.to_i) ||
         exception_index[:rules].any? { |rule| rule.on?(time, start_time) }
     end
 
@@ -495,8 +494,8 @@ module IceCube
       @exception_index ||= begin
         single, rules = @all_exception_rules.partition { |r| r.is_a?(SingleOccurrenceRule) }
         {
-          times: single.map { |r| r.time.to_r }.to_set,
-          seconds: single.map { |r| r.time.to_i }.to_set,
+          times: single.to_h { |r| [r.time.to_r, true] },
+          seconds: single.to_h { |r| [r.time.to_i, true] },
           rules: rules
         }
       end
